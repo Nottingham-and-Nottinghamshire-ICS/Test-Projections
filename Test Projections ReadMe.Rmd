@@ -1,0 +1,9 @@
+---
+title: "Test Projection ReadMe"
+output: html_document
+date: "2023-06-07"
+---
+
+This R Markdown file allows the user to project custom data forwards using ONS population projections. Two files are available: table2 contains the population projections for all areas in England and Values is an example dataset which can be changed by the user to project custom data forwards, so please change as necessary. In order for the projections to work the groupings need to match in the two files (locality and age group), so please ensure that these match before running the Markdown file. 
+
+The Markdown file will output an HTML file with the full R script including code to clarify the function of each code chunk. Included within the output are a series of plots detailing the projections to 2043 including a total overview, total projections split by age group and individual facet_wraps for each locality split by age group. Please change the titles and labels as necessary. As this project is based on Nottinghamshire, please change the location filter on line 81. 
