@@ -1,0 +1,178 @@
+
+---
+title: "Population Projections Example"
+output: html_document
+date: "`r format(Sys.Date())`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+This R script allows the user to project future demand based on population projections sourced from ONS. 
+The population projections are from the excel file called table2 and the data to be projected needs to be 
+in the correct format, detailed in the excel file attached. 
+The projection data has seperate tabs for different genders, along with a combined dataset for 
+both genders. The below script projects the combined dataset (Persons sheet). 
+
+``` {r table 1, include = FALSE, results = "markup"}
+
+library(qcc)
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(feasts)
+library(fpp3)
+library(forecast)
+library(dygraphs)
+library(rlang)
+library(writexl)
+library(DBI)
+library(odbc)
+library(scales)
+
+```
+
+
+
+```{r table 2}
+
+Population <- read_xlsx(path = "table2.xlsx", sheet = "Persons")
+
+head(Population, 10)
+
+```
+
+The population data contains a Code column which will not be required for any analysis and 
+also contains data for 'All Ages' which needs to be removed to ensure there's no duplication of 
+analysis. Additionally, the data is in a format where the years are column headings. To make 
+analysis easier we need to pivot the data longer. 
+
+As the population data contains data from 2018 to 2043 we need to remove years 2018 to 2021.
+
+```{r table 3}
+Population <-  Population %>% filter(`AGE GROUP` != "All ages")
+
+Population <- Population %>% subset(select = -c(CODE))
+
+Population <- Population %>% pivot_longer(`2018`:`2043`, names_to = "Year", values_to = "Population")
+
+Population <- Population %>% filter(Year != 2018)
+
+Population <- Population %>% filter(Year != 2019)
+
+Population <- Population %>% filter(Year != 2020)
+
+Population <- Population %>% filter(Year != 2021)
+
+
+```
+
+The population data contains information for all regions within England, however this 
+analysis was focussed on Nottinghamshire. Please change the filter accordingly. 
+
+```{r table 4}
+
+Population <- Population %>% filter(AREA %in% c("Ashfield", "Bassetlaw", "Broxtowe", "Gedling", "Mansfield", "Newark and Sherwood", "Nottingham", "Rushcliffe"))
+
+```
+
+We now need to read in the example dataset to project forward using the population data. 
+This has been provided as a template with example data. Please change the values accordingly
+
+``` {r table 5}
+
+Values <- read_xlsx(path = "Values.xlsx")
+
+head(Values, 10)
+
+```
+
+In order to project the data we need to merge the population data with the projection data. 
+To do this we need to make a unique indexing column to perform the left join which is
+a combination of the area and age group. This is done using the paste0 function. 
+
+``` {r table 6}
+
+Population <-  Population %>% mutate(Index = paste0(AREA, `AGE GROUP`))
+
+Values <- Values %>% mutate(Index = paste0(Area, `Age Group`))
+
+Projection_Data <- left_join(Population, Values, by = "Index")
+
+
+```
+
+The left join will create duplicate columns which need to be removed. Additionally,
+tidying the data will make projections easier. 
+
+``` {r table 7}
+
+Projection_Data <- Projection_Data %>% subset(select = c(Area, `Age Group`, Year, Population, Index, Values))
+
+```
+
+We can now calculate the projections. Due to the high number of unique groups within the dataset, 
+calculating the projections one-by-one would be time consuming. Therefore we create a loop
+which will run over the index column to calculate the projections for each of these 
+unique groups. In order to create a new dataset with the calculated projections in we need
+to create a new, empty dataframe. 
+
+``` {r table 8}
+
+df_1 <- data.frame()
+
+for (i in unique(Projection_Data$Index)) {
+  Projection_Data_2 <- Projection_Data %>% filter(Index == i) %>% mutate(Pop_Growth = Population/head(Population, n = 1)) %>%
+    mutate(Value_Growth = Values*Pop_Growth)
+  df_1 <- rbind(df_1, Projection_Data_2)
+}
+
+
+```
+
+
+Now that the data has been cleaned and formatted we can visualise the projections in 
+the plots below. 
+
+``` {r table 10, echo = FALSE}
+
+df_1 %>% ggplot(aes(x = Year, y = Value_Growth)) +
+  geom_col() +
+  theme_bw() +
+  scale_x_discrete(breaks = c("2025", "2030", "2035", "2040")) +
+  labs(y = "Growth", title = "Total Projected Growth to 2043")
+
+df_1 %>% ggplot(aes(x = Year, y = Value_Growth)) +
+  geom_col() +
+  theme_bw() +
+  facet_wrap(~`Age Group`) +
+  scale_x_discrete(breaks = c("2030", "2040")) +
+  labs(y = "Growth", title = "Total Projected Growth to 2043", subtitle = "Split by Age Group")
+
+
+
+```
+
+
+As the projections have calculated for the individual areas we can create a loop 
+to automatically plot the individual graphs
+
+``` {r table 11}
+
+for(i in unique(df_1$Area)){
+  title_label = paste0("Projected Increase by Age Group in ", i)
+  
+  print(df_1 %>% filter(Area == i) %>% ggplot(aes(x = Year, y = Value_Growth)) +
+  geom_col() +
+  facet_wrap(~`Age Group`, nrow = 5) +
+    theme_bw() +
+    labs(title = title_label, y = "Growth") +
+    scale_x_discrete(breaks = c("2025", "2030", "2035", "2040")))}
+
+```
